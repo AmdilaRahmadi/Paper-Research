@@ -1,7 +1,13 @@
+import javax.swing.*;
 public class Main {
     public static void main(String[] args) {
-        System.out.println("Hello world!");
-        System.out.println("Hello world!");
-        System.out.println("Hello world!");
+        SwingUtilities.invokeLater(() -> {
+            JFrame frame = new JFrame("Paper Search");
+            Gui gui = new Gui();
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setSize(800, 600);
+            frame.setContentPane(gui.getPanel());
+            frame.setVisible(true);
+        });
     }
 }
