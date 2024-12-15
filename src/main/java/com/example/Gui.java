@@ -1,9 +1,13 @@
 package com.example;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.io.*;
+// import java.net.ServerSocket;
+import java.net.Socket;
+// import java.util.concurrent.Executors;
 import java.awt.event.*;
-import javax.swing.Timer;
 
 public class Gui {
     private JList<String> resultList;
@@ -31,7 +35,15 @@ public class Gui {
         // Scroll pane untuk panel kiri
         JScrollPane leftScrollPane = new JScrollPane(leftPanel);
         leftScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-        leftScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER); // Tidak perlu scroll horizontal
+        leftScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER); // Tidak perlu
+                                                                                                     // scroll
+                                                                                                     // horizontal
+        // Tombol Receive
+        JButton receiveButton = new JButton("Receive File");
+        receiveButton.addActionListener(e -> {
+            new Thread(() -> ReceiveFile.startServer(1234)).start();
+            JOptionPane.showMessageDialog(panel1, "Server is running. Ready to receive files!");
+        });
 
         // Panel atas: Pencarian
         topPanel = new JPanel(new BorderLayout());
@@ -39,6 +51,7 @@ public class Gui {
         searchButton = new JButton("Search");
         topPanel.add(searchField, BorderLayout.CENTER);
         topPanel.add(searchButton, BorderLayout.EAST);
+        topPanel.add(receiveButton, BorderLayout.WEST);
 
         // Panel tengah: Hasil pencarian
         centerPanel = new JPanel(new BorderLayout());
@@ -82,8 +95,7 @@ public class Gui {
         // Tombol Share
         JButton shareButton = new JButton("Bagikan");
         shareButton.addActionListener(e -> {
-            // Logic untuk share (misalnya, menunjukkan pesan)
-            JOptionPane.showMessageDialog(panel1, "Sharing the paper...");
+            PeerToPeer.startClient();
         });
 
         JPanel rightTopPanel = new JPanel();
@@ -265,5 +277,93 @@ public class Gui {
 
     public JPanel getPanel() {
         return panel1;
+    }
+}
+
+class PeerToPeer {
+
+    static final int PORT = 1234;
+
+    public static void startClient() {
+        // GUI untuk Peer-to-Peer File Transfer
+        final File[] fileToSend = new File[1];
+
+        JFrame peerFrame = new JFrame("Peer-to-Peer File Transfer");
+        peerFrame.setSize(450, 450);
+        peerFrame.setLayout(new BoxLayout(peerFrame.getContentPane(), BoxLayout.Y_AXIS));
+        peerFrame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Hanya tutup GUI ini
+
+        JLabel jlTitle = new JLabel("Peer-to-Peer File Transfer");
+        jlTitle.setFont(new Font("Arial", Font.BOLD, 20));
+        jlTitle.setBorder(new EmptyBorder(20, 0, 10, 0));
+        jlTitle.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JLabel jlFileName = new JLabel("Choose a file to send");
+        jlFileName.setFont(new Font("Arial", Font.BOLD, 20));
+        jlFileName.setBorder(new EmptyBorder(50, 0, 0, 0));
+        jlFileName.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        JPanel jpButton = new JPanel();
+        jpButton.setBorder(new EmptyBorder(75, 0, 10, 0));
+
+        JButton jbSendFile = new JButton("Send File");
+        jbSendFile.setPreferredSize(new Dimension(150, 75));
+        jbSendFile.setFont(new Font("Arial", Font.BOLD, 20));
+
+        JButton jbChooseFile = new JButton("Choose File");
+        jbChooseFile.setPreferredSize(new Dimension(150, 75));
+        jbChooseFile.setFont(new Font("Arial", Font.BOLD, 20));
+
+        jpButton.add(jbSendFile);
+        jpButton.add(jbChooseFile);
+
+        jbChooseFile.addActionListener(e -> {
+            JFileChooser jFileChooser = new JFileChooser();
+            jFileChooser.setDialogTitle("Choose a file to send");
+
+            if (jFileChooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+                fileToSend[0] = jFileChooser.getSelectedFile();
+                jlFileName.setText("The file you want to send is: " + fileToSend[0].getName());
+            }
+        });
+
+        jbSendFile.addActionListener(e -> {
+            if (fileToSend[0] == null) {
+                jlFileName.setText("Please choose a file first.");
+            } else {
+                String targetIP = JOptionPane.showInputDialog("Enter the target IP address:");
+                if (targetIP != null && !targetIP.isEmpty()) {
+                    sendFile(targetIP, PORT, fileToSend[0]);
+                }
+            }
+        });
+
+        peerFrame.add(jlTitle);
+        peerFrame.add(jlFileName);
+        peerFrame.add(jpButton);
+        peerFrame.setVisible(true);
+    }
+
+    public static void sendFile(String host, int port, File file) {
+        try (Socket socket = new Socket(host, port);
+                FileInputStream fis = new FileInputStream(file);
+                DataOutputStream dataOutputStream = new DataOutputStream(socket.getOutputStream())) {
+
+            // System.out.println("Sending file to " + host + ":" + port);
+
+            String fileName = file.getName();
+            byte[] fileNameBytes = fileName.getBytes();
+            byte[] fileContentBytes = new byte[(int) file.length()];
+            fis.read(fileContentBytes);
+
+            dataOutputStream.writeInt(fileNameBytes.length);
+            dataOutputStream.write(fileNameBytes);
+
+            dataOutputStream.writeInt(fileContentBytes.length);
+            dataOutputStream.write(fileContentBytes);
+            // System.out.println("File sent successfully!");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
