@@ -5,9 +5,11 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.io.*;
 // import java.net.ServerSocket;
+import java.net.HttpURLConnection;
 import java.net.Socket;
 // import java.util.concurrent.Executors;
 import java.awt.event.*;
+import java.net.URL;
 
 public class Gui {
     private JList<String> resultList;
@@ -19,8 +21,8 @@ public class Gui {
     private JTextField searchField;
     private JButton searchButton;
     private JTextArea descriptionArea;
-    private boolean descriptionVisible = false; // Track visibility of description
-    private boolean descriptionLocked = false; // Track if description is locked
+    private boolean descriptionVisible = false;
+    private boolean descriptionLocked = false;
 
     public Gui() {
         panel1 = new JPanel();
@@ -28,16 +30,15 @@ public class Gui {
 
         // Panel kiri: History
         leftPanel = new JPanel();
-        leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS)); // Susunan vertikal
+        leftPanel.setLayout(new BoxLayout(leftPanel, BoxLayout.Y_AXIS));
         leftPanel.setBorder(BorderFactory.createTitledBorder("History"));
-        leftPanel.setPreferredSize(new Dimension(250, 0)); // Lebar default panel kiri
+        leftPanel.setPreferredSize(new Dimension(250, 0));
 
         // Scroll pane untuk panel kiri
         JScrollPane leftScrollPane = new JScrollPane(leftPanel);
         leftScrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
-        leftScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER); // Tidak perlu
-                                                                                                     // scroll
-                                                                                                     // horizontal
+        leftScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+
         // Tombol Receive
         JButton receiveButton = new JButton("Receive File");
         receiveButton.addActionListener(e -> {
@@ -78,18 +79,52 @@ public class Gui {
         });
 
         // Tombol Open
-        JButton openButton = new JButton("Buka");
-        openButton.addActionListener(e -> {
-            // Logic untuk open, misalnya membuka deskripsi di jendela baru
-            JOptionPane.showMessageDialog(panel1, "Opening the paper...");
-            // Bisa ganti dengan logika membuka file atau URL
-        });
+//        JButton openButton = new JButton("Buka");
+//        openButton.addActionListener(e -> {
+//            JOptionPane.showMessageDialog(panel1, "Opening the paper...");
+//        });
 
         // Tombol Download
         JButton downloadButton = new JButton("Unduh");
         downloadButton.addActionListener(e -> {
-            // Logic untuk download (misalnya, menunjukkan pesan)
-            JOptionPane.showMessageDialog(panel1, "Downloading the paper...");
+            String selectedPaper = resultList.getSelectedValue();
+
+            if (selectedPaper == null || selectedPaper.isEmpty()) {
+                JOptionPane.showMessageDialog(panel1, "Pilih sebuah paper terlebih dahulu.");
+                return;
+            }
+
+            String fileName = selectedPaper.substring(selectedPaper.lastIndexOf("/") + 1);
+
+            if (!fileName.endsWith(".pdf")) {
+                fileName += ".pdf";
+            }
+
+            fileName = fileName.replaceAll("[\\\\/:*?\"<>|]", "_");
+            String userHome = System.getProperty("user.home"); // Mendapatkan direktori home user
+            String savePath = userHome + "/Downloads/" + fileName;
+
+            try {
+                URL url = new URL(selectedPaper);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(5000);
+                connection.setReadTimeout(5000);
+
+                try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream());
+                     BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(savePath))) {
+
+                    int bytesRead;
+                    while ((bytesRead = in.read()) != -1) {
+                        out.write(bytesRead);
+                    }
+
+                    JOptionPane.showMessageDialog(panel1, "Paper berhasil diunduh ke " + savePath);
+                }
+
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(panel1, "Terjadi kesalahan saat mengunduh: " + ex.getMessage());
+            }
         });
 
         // Tombol Share
@@ -104,14 +139,14 @@ public class Gui {
         rightTopPanel.add(lockButton, BorderLayout.EAST);
 
         JPanel buttonPanel = new JPanel();
-        buttonPanel.add(openButton);
+        // buttonPanel.add(openButton);
         buttonPanel.add(downloadButton);
         buttonPanel.add(shareButton);
 
         rightPanel.add(rightTopPanel, BorderLayout.NORTH);
         rightPanel.add(new JScrollPane(descriptionArea), BorderLayout.CENTER);
-        rightPanel.add(buttonPanel, BorderLayout.SOUTH); // Panel button di bawah deskripsi
-        rightPanel.setPreferredSize(new Dimension(0, 0)); // Default width set to 0, hidden initially
+        rightPanel.add(buttonPanel, BorderLayout.SOUTH);
+        rightPanel.setPreferredSize(new Dimension(0, 0));
 
         // Menambahkan panel-panel ke panel utama
         panel1.add(leftScrollPane, BorderLayout.WEST);
@@ -125,21 +160,31 @@ public class Gui {
             public void actionPerformed(ActionEvent e) {
                 String query = searchField.getText().trim();
                 if (!query.isEmpty()) {
-                    // Tambahkan entri baru ke panel kiri
                     JPanel historyItemPanel = createHistoryPanel(query);
                     leftPanel.add(historyItemPanel);
-                    leftPanel.revalidate(); // Memperbarui tampilan setelah penambahan
+                    leftPanel.revalidate();
                     leftPanel.repaint();
 
-                    // Menambahkan hasil pencarian ke daftar
                     DefaultListModel<String> resultModel = (DefaultListModel<String>) resultList.getModel();
                     resultModel.clear();
-                    resultModel.addElement("Paper 1 tentang " + query);
-                    resultModel.addElement("Paper 2 tentang " + query);
-                    resultModel.addElement("Paper 3 tentang " + query);
+
+                    try {
+                        java.util.List<String> pdfLinks = PaperScrap.searchForPdf(query);
+
+                        if (pdfLinks.isEmpty()) {
+                            resultModel.addElement("Tidak ditemukan hasil PDF untuk: " + query);
+                        } else {
+                            for (String pdfLink : pdfLinks) {
+                                resultModel.addElement(pdfLink);
+                            }
+                        }
+                    } catch (IOException ex) {
+                        resultModel.addElement("Terjadi kesalahan saat pencarian: " + ex.getMessage());
+                    }
                 }
             }
         });
+
 
         // Event pada list hasil pencarian
         resultList.addListSelectionListener(e -> {
@@ -147,7 +192,7 @@ public class Gui {
                 String selectedPaper = resultList.getSelectedValue();
                 if (selectedPaper != null) {
                     descriptionArea.setText(selectedPaper + "\n\nDeskripsi lengkap dari " + selectedPaper + ".");
-                    slideInDescription(); // Panggil slide in saat hasil diklik
+                    slideInDescription();
                 }
             }
         });
